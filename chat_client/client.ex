@@ -3,7 +3,7 @@ defmodule Chat.Client do
 
   def start() do
     {address, port} = get_address_and_port()
-    {:ok, socket} = :gen_tcp.connect(address, port, [:binary, active: true])
+    {:ok, socket} = :gen_tcp.connect(address, port, [:binary, active: true, packet: 2])
     nickname = IO.gets("Nickname: ") |> String.trim()
 
     gets_pid = spawn_gets_process(self())
@@ -29,15 +29,15 @@ defmodule Chat.Client do
             other -> other
           end
 
-        payload = %{kind: :broadcast, nickname: nickname, message: message}
-        :ok = :gen_tcp.send(socket, encode_packet(payload))
+        payload = %{"kind" => "broadcast", "nickname" => nickname, "message" => message}
+        :ok = :gen_tcp.send(socket, Jason.encode!(payload))
 
         write_prompt(nickname)
         gets_pid = spawn_gets_process(self())
         loop(socket, nickname, gets_pid)
 
       {:tcp, ^socket, data} ->
-        message = decode_packet(data)
+        message = Jason.decode!(data)
         gets_pid = handle_server_message(gets_pid, nickname, message)
         loop(socket, nickname, gets_pid)
 
@@ -49,8 +49,8 @@ defmodule Chat.Client do
     end
   end
 
-  defp handle_server_message(gets_pid, nickname, %{kind: :broadcast} = payload) do
-    %{nickname: broadcaster_nickname, message: message} = payload
+  defp handle_server_message(gets_pid, nickname, %{"kind" => "broadcast"} = payload) do
+    %{"nickname" => broadcaster_nickname, "message" => message} = payload
 
     kill_and_wait(gets_pid)
 
@@ -62,8 +62,8 @@ defmodule Chat.Client do
     spawn_gets_process(self())
   end
 
-  defp handle_server_message(gets_pid, nickname, %{kind: :welcome} = payload) do
-    %{users_online: users_online} = payload
+  defp handle_server_message(gets_pid, nickname, %{"kind" => "welcome"} = payload) do
+    %{"users_online" => users_online} = payload
 
     kill_and_wait(gets_pid)
 
@@ -73,15 +73,6 @@ defmodule Chat.Client do
     write_prompt(nickname)
 
     spawn_gets_process(self())
-  end
-
-  defp decode_packet(<<size::16-integer-unsigned-big, data::binary-size(size)>>) do
-    :erlang.binary_to_term(data)
-  end
-
-  defp encode_packet(data) do
-    data = :erlang.term_to_binary(data)
-    <<byte_size(data)::16-integer-unsigned-big, data::binary>>
   end
 
   defp kill_and_wait(pid) do
