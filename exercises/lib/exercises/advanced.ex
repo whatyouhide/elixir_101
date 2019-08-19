@@ -24,7 +24,7 @@ defmodule Exercises.Advanced do
   @doc """
   Returns the three largest numbers of the list
   """
-  def three_largest(list) do
+  def three_largest(_list) do
     raise "not implemented yet"
   end
 
